@@ -65,15 +65,16 @@ onboarding_users = set()
 async def on_member_join(member):
     guild = member.guild
 
-    # Prevent re-onboarding if user ID already exists
-    if member.id in user_projects:
-        print(f"⏳ Skipping onboarding for existing member: {member.name} ({member.id})")
+    if member.id in onboarding_users:
+        print(f"⏳ Onboarding already in progress for {member.name} ({member.id}) — skipping.")
         return
+    onboarding_users.add(member.id)
 
     def check(m):
         return m.author == member and isinstance(m.channel, discord.DMChannel)
 
     try:
+        # ✅ ACTUAL INTAKE BEGINS
         await member.send("🐾 Well, well. Another writer in need of a cozy corner...")
         await member.send("What’s your name?")
         name_msg = await bot.wait_for("message", check=check, timeout=300)
@@ -103,14 +104,13 @@ async def on_member_join(member):
         if admin_role:
             overwrites[admin_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True)
 
-        # Create category
         category = await guild.create_category(name=f"{user_name}'s Projects", overwrites=overwrites)
         user_categories[member.id] = category.id
-        user_projects[member.id] = []  # This line acts as the persistent onboarding flag
+        user_projects[member.id] = []
 
         for i in range(1, num_projects + 1):
             while True:
-                await member.send(f"📘 Project #{i}? Reply with: `Title, Genre, Current Word Count, Goal Word Count, Stage` \n Please separate each with a comma, and don't use spaces in your word count numbers (e.g. 125000)")
+                await member.send(f"📘 Project #{i}? Reply with: `Title, Genre, Current Word Count, Goal Word Count, Stage` \nPlease separate each with a comma, and don’t use spaces in numbers.")
                 msg = await bot.wait_for("message", check=check, timeout=300)
                 parts = [p.strip() for p in msg.content.split(",")]
 
@@ -137,6 +137,9 @@ async def on_member_join(member):
 
     except Exception as e:
         print(f"❌ Error during onboarding for {member.name}: {e}")
+    finally:
+        onboarding_users.discard(member.id)
+
 
 @bot.event
 async def on_member_remove(member):
