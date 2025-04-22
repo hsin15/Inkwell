@@ -58,12 +58,17 @@ async def on_ready():
     start_tasks()
 
 # NEW MEMBER INTAKE
+# Global set to track onboarding users
+onboarding_users = set()
+
 @bot.event
 async def on_member_join(member):
-    guild = member.guild
+    if member.id in onboarding_users:
+        print(f"⏳ Skipping duplicate onboarding for {member.name}")
+        return
 
-    def check(msg):
-        return msg.author == member and isinstance(msg.channel, discord.DMChannel)
+    onboarding_users.add(member.id)  # Mark as in progress
+    print(f"📅 on_member_join triggered for {member.name} ({member.id}) at {datetime.utcnow().isoformat()}")
 
     try:
         await member.send("🐾 Well, well. Another writer in need of a cozy corner...")
@@ -124,7 +129,10 @@ async def on_member_join(member):
         await member.send("✅ All done! Your writing den is ready.")
 
     except Exception as e:
-        print(f"❌ Intake error: {e}")
+        print(f"❌ Error during onboarding for {member.name}: {e}")
+
+    finally:
+        onboarding_users.discard(member.id)  # Cleanup even on failure
 
 # WEEKLY GOAL DM
 @tasks.loop(minutes=1)
