@@ -277,7 +277,10 @@ async def new_project(ctx):
 async def setup_me(ctx):
     admin_role = discord.utils.get(ctx.guild.roles, name=ADMIN_ROLE_NAME)
     if admin_role in ctx.author.roles:
-        await on_member_join(ctx.author)
+        if ctx.author.id in user_categories:
+            await ctx.send("✅ You're already set up!")
+        else:
+            await on_member_join(ctx.author)
     else:
         await ctx.send("❌ Only admins can run this command.")
 
