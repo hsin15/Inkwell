@@ -262,32 +262,52 @@ async def add_project(ctx):
         await member.send("❌ Something went wrong while setting up your project.")
         print(f"❌ Error in addproject command: {e}")
 
-@bot.command(name="adminsetup")
+@bot.command(name="adminsetupme")
 @commands.has_role(ADMIN_ROLE_NAME)
-async def admin_setup(ctx):
+async def admin_setup_me(ctx):
     member = ctx.author
     guild = ctx.guild
+
+    # Skip if user already has a project setup
+    if member.id in user_projects:
+        await member.send("🗂 You already have a writing den set up.")
+        return
 
     def check(m):
         return m.author == member and isinstance(m.channel, discord.DMChannel)
 
     try:
-        await member.send("👑 Setting up your own writing den, are we? Let's begin.")
+        await member.send("🐾 Well, well. Another writer in need of a cozy corner...")
+        await member.send("What’s your name?")
+        name_msg = await bot.wait_for("message", check=check, timeout=300)
+        user_name = name_msg.content.strip()
 
-        await member.send("How many projects do you want to set up?")
-        response = await bot.wait_for("message", check=check, timeout=300)
-        num_projects = int(response.content.strip())
+        word_to_num = {
+            "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+            "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10
+        }
 
+        while True:
+            await member.send("How many projects are you juggling?\n(Enter a number or a word between 1 and 10, e.g. `3` or `three`)")
+            try:
+                response = await bot.wait_for("message", check=check, timeout=300)
+                num_text = response.content.strip().lower()
+                num_projects = int(num_text) if num_text.isdigit() else word_to_num[num_text]
+                break
+            except (KeyError, ValueError):
+                await member.send("❌ That wasn’t a valid number. Try again with something like `2` or `two`.")
+
+        # Set permissions
         admin_role = discord.utils.get(guild.roles, name=ADMIN_ROLE_NAME)
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=True, send_messages=False),
-            member: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True),
+            member: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True)
         }
         if admin_role:
             overwrites[admin_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True)
 
-        category_name = f"{member.display_name}'s Projects"
-        category = await guild.create_category(name=category_name, overwrites=overwrites)
+        # Create category
+        category = await guild.create_category(name=f"{user_name}'s Projects", overwrites=overwrites)
         user_categories[member.id] = category.id
         user_projects[member.id] = []
 
@@ -312,16 +332,16 @@ async def admin_setup(ctx):
                 channel = await guild.create_text_channel(name=title.lower().replace(" ", "-"), category=category)
                 tracker = await channel.send(build_tracker(title, genre, stage, current_wc, goal_wc))
                 await tracker.pin()
-
                 user_projects[member.id].append((channel.id, title, datetime.utcnow(), goal_wc, tracker.id, stage))
                 user_project_metadata[channel.id] = (member.id, title, genre, goal_wc)
                 break
 
-        await member.send("✅ All set, your personal writing den has been created.")
+        await member.send("✅ All done! Your writing den is ready.")
 
     except Exception as e:
-        await member.send("❌ Something went wrong while setting up your project.")
-        print(f"❌ Error in adminsetup command: {e}")
+        await member.send("❌ Something went wrong while setting up your den.")
+        print(f"❌ Error in adminsetupme: {e}")
+
 
 # TRACKER AUTO-UPDATE
 @bot.event
