@@ -67,8 +67,11 @@ async def on_member_join(member):
         print(f"⏳ Skipping duplicate onboarding for {member.name}")
         return
 
-    onboarding_users.add(member.id)  # Mark as in progress
-    print(f"📅 on_member_join triggered for {member.name} ({member.id}) at {datetime.utcnow().isoformat()}")
+    onboarding_users.add(member.id)
+    guild = member.guild
+
+    def check(m):
+        return m.author == member and isinstance(m.channel, discord.DMChannel)
 
     try:
         await member.send("🐾 Well, well. Another writer in need of a cozy corner...")
