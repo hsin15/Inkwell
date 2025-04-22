@@ -63,12 +63,12 @@ onboarding_users = set()
 
 @bot.event
 async def on_member_join(member):
-    if member.id in onboarding_users:
-        print(f"⏳ Skipping duplicate onboarding for {member.name}")
-        return
-
-    onboarding_users.add(member.id)
     guild = member.guild
+
+    # Prevent re-onboarding if user ID already exists
+    if member.id in user_projects:
+        print(f"⏳ Skipping onboarding for existing member: {member.name} ({member.id})")
+        return
 
     def check(m):
         return m.author == member and isinstance(m.channel, discord.DMChannel)
@@ -79,8 +79,10 @@ async def on_member_join(member):
         name_msg = await bot.wait_for("message", check=check, timeout=300)
         user_name = name_msg.content.strip()
 
-        word_to_num = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
-                       "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}
+        word_to_num = {
+            "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+            "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10
+        }
 
         while True:
             await member.send("How many projects are you juggling?\n(Enter a number or a word between 1 and 10, e.g. `3` or `three`)")
@@ -92,6 +94,7 @@ async def on_member_join(member):
             except (KeyError, ValueError):
                 await member.send("❌ That wasn’t a valid number. Try again with something like `2` or `two`.")
 
+        # Set permissions
         admin_role = discord.utils.get(guild.roles, name=ADMIN_ROLE_NAME)
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=True, send_messages=False),
@@ -100,9 +103,10 @@ async def on_member_join(member):
         if admin_role:
             overwrites[admin_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True)
 
+        # Create category
         category = await guild.create_category(name=f"{user_name}'s Projects", overwrites=overwrites)
         user_categories[member.id] = category.id
-        user_projects[member.id] = []
+        user_projects[member.id] = []  # This line acts as the persistent onboarding flag
 
         for i in range(1, num_projects + 1):
             while True:
@@ -134,8 +138,6 @@ async def on_member_join(member):
     except Exception as e:
         print(f"❌ Error during onboarding for {member.name}: {e}")
 
-    finally:
-        onboarding_users.discard(member.id)  # Cleanup even on failure
 
 # WEEKLY GOAL DM
 @tasks.loop(minutes=1)
