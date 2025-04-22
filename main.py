@@ -53,6 +53,7 @@ async def on_ready():
 
 @bot.event
 async def on_member_join(member):
+    print(f"📥 on_member_join triggered for {member.name} at {datetime.utcnow().isoformat()}")
     guild = member.guild
     print(f"🕐 New member joined: {member.name}")
 
