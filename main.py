@@ -53,23 +53,27 @@ async def on_ready():
 
 @bot.event
 async def on_member_join(member):
-    print(f"📅 on_member_join triggered for {member.name} at {datetime.utcnow().isoformat()}")
+    print(f"📅 on_member_join triggered for {member.name} ({member.id}) at {datetime.utcnow().isoformat()}")
     guild = member.guild
 
     def check(m):
         return m.author == member and isinstance(m.channel, discord.DMChannel)
 
     try:
-        await member.send("\ud83d\udc3e Well, well. Another writer in need of a cozy corner...")
+        await member.send("🐾 Well, well. Another writer in need of a cozy corner...")
 
+        # Ask for user name
         await member.send("What’s your name?")
         name_msg = await bot.wait_for("message", check=check, timeout=300)
         user_name = name_msg.content.strip()
-        
+        print(f"[DEBUG] Name entered: {user_name}")
+
+        # Ask for number of projects
         word_to_num = {
-                "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
-                "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10
-            }
+            "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+            "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10
+        }
+
         while True:
             await member.send("How many projects are you juggling?\n(Enter a number or a word between 1 and 10, e.g. `3` or `three`)")
             num_projects_msg = await bot.wait_for("message", check=check, timeout=300)
@@ -77,10 +81,12 @@ async def on_member_join(member):
 
             try:
                 num_projects = int(num_text) if num_text.isdigit() else word_to_num[num_text]
-                break  # valid input received
+                print(f"[DEBUG] Projects entered: {num_projects}")
+                break
             except (KeyError, ValueError):
                 await member.send("❌ That wasn’t a valid number. Try again with something like `2` or `two`.")
 
+        # Set permissions
         admin_role = discord.utils.get(guild.roles, name=ADMIN_ROLE_NAME)
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(
@@ -100,15 +106,16 @@ async def on_member_join(member):
                 manage_channels=True
             )
 
+        # Create project category
         category_name = f"{user_name}'s Projects"
         category = await guild.create_category(name=category_name, overwrites=overwrites)
-
         user_projects[member.id] = []
         user_categories[member.id] = category.id
 
+        # Collect each project
         for i in range(1, num_projects + 1):
             while True:
-                await member.send(f"Project #{i}? Reply with: `Title, Genre, Current Word Count, Goal Word Count, Stage`")
+                await member.send(f"📘 Project #{i}? Reply with: `Title, Genre, Current Word Count, Goal Word Count, Stage`")
                 details = await bot.wait_for("message", check=check, timeout=300)
                 parts = [p.strip() for p in details.content.split(",")]
 
@@ -120,26 +127,30 @@ async def on_member_join(member):
                     project_name, genre, word_count, goal_word_count, stage = parts
                     current_wc = int(word_count)
                     goal_wc = int(goal_word_count)
+                    break
                 except ValueError:
                     await member.send("❌ Word counts must be numbers. Try again.")
-                    continue
 
-                channel_name = project_name.lower().replace(" ", "-")
-                project_channel = await guild.create_text_channel(name=channel_name, category=category)
+            # Create project channel
+            channel_name = project_name.lower().replace(" ", "-")
+            project_channel = await guild.create_text_channel(name=channel_name, category=category)
 
-                tracker_message = await project_channel.send(
-                    build_tracker(project_name, genre, stage, current_wc, goal_wc)
-                )
-                await tracker_message.pin()
+            # Send tracker message
+            tracker_message = await project_channel.send(
+                build_tracker(project_name, genre, stage, current_wc, goal_wc)
+            )
+            await tracker_message.pin()
 
-                user_projects[member.id].append((project_channel.id, project_name, datetime.utcnow(), goal_wc, tracker_message.id, stage))
-                user_project_metadata[project_channel.id] = (member.id, project_name, genre, goal_wc)
-                break
+            # Store metadata
+            user_projects[member.id].append((project_channel.id, project_name, datetime.utcnow(), goal_wc, tracker_message.id, stage))
+            user_project_metadata[project_channel.id] = (member.id, project_name, genre, goal_wc)
 
-        await member.send("All done! Your writing den is ready.")
+        await member.send("✅ All done! Your writing den is ready.")
 
     except Exception as e:
-        print(f"❌ Error collecting info: {e}")
+        print(f"❌ Error during onboarding for {member.name}: {e}")
+
+
 @tasks.loop(minutes=1)
 async def weekly_goal_prompt():
     now = datetime.now(pytz.timezone("Australia/Sydney"))
