@@ -110,7 +110,7 @@ async def on_member_join(member):
 
         for i in range(1, num_projects + 1):
             while True:
-                await member.send(f"📘 Project #{i}? Reply with: `Title, Genre, Current Word Count, Goal Word Count, Stage`")
+                await member.send(f"📘 Project #{i}? Reply with: `Title, Genre, Current Word Count, Goal Word Count, Stage` \n Please separate each with a comma, and don't use spaces in your word count numbers (e.g. 125000)")
                 msg = await bot.wait_for("message", check=check, timeout=300)
                 parts = [p.strip() for p in msg.content.split(",")]
 
