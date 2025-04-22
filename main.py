@@ -262,6 +262,67 @@ async def add_project(ctx):
         await member.send("❌ Something went wrong while setting up your project.")
         print(f"❌ Error in addproject command: {e}")
 
+@bot.command(name="adminsetup")
+@commands.has_role(ADMIN_ROLE_NAME)
+async def admin_setup(ctx):
+    member = ctx.author
+    guild = ctx.guild
+
+    def check(m):
+        return m.author == member and isinstance(m.channel, discord.DMChannel)
+
+    try:
+        await member.send("👑 Setting up your own writing den, are we? Let's begin.")
+
+        await member.send("How many projects do you want to set up?")
+        response = await bot.wait_for("message", check=check, timeout=300)
+        num_projects = int(response.content.strip())
+
+        admin_role = discord.utils.get(guild.roles, name=ADMIN_ROLE_NAME)
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=True, send_messages=False),
+            member: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True),
+        }
+        if admin_role:
+            overwrites[admin_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True)
+
+        category_name = f"{member.display_name}'s Projects"
+        category = await guild.create_category(name=category_name, overwrites=overwrites)
+        user_categories[member.id] = category.id
+        user_projects[member.id] = []
+
+        for i in range(1, num_projects + 1):
+            while True:
+                await member.send(f"📘 Project #{i}? Reply with: `Title, Genre, Current Word Count, Goal Word Count, Stage`")
+                msg = await bot.wait_for("message", check=check, timeout=300)
+                parts = [p.strip() for p in msg.content.split(",")]
+
+                if len(parts) < 5:
+                    await member.send("❌ I need all five details. Try again.")
+                    continue
+
+                try:
+                    title, genre, current, goal, stage = parts
+                    current_wc = int(current)
+                    goal_wc = int(goal)
+                except ValueError:
+                    await member.send("❌ Word counts must be numbers. Try again.")
+                    continue
+
+                channel = await guild.create_text_channel(name=title.lower().replace(" ", "-"), category=category)
+                tracker = await channel.send(build_tracker(title, genre, stage, current_wc, goal_wc))
+                await tracker.pin()
+
+                user_projects[member.id].append((channel.id, title, datetime.utcnow(), goal_wc, tracker.id, stage))
+                user_project_metadata[channel.id] = (member.id, title, genre, goal_wc)
+                break
+
+        await member.send("✅ All set, your personal writing den has been created.")
+
+    except Exception as e:
+        await member.send("❌ Something went wrong while setting up your project.")
+        print(f"❌ Error in adminsetup command: {e}")
+
 # TRACKER AUTO-UPDATE
 @bot.event
 async def on_message(message):
