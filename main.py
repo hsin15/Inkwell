@@ -51,90 +51,90 @@ async def on_ready():
     weekly_goal_prompt.start()
     inactivity_reminder.start()
 
-        @bot.event
-        async def on_member_join(member):
-            print(f"📥 on_member_join triggered for {member.name} at {datetime.utcnow().isoformat()}")
-            guild = member.guild
-            print(f"🕐 New member joined: {member.name}")
+@bot.event
+async def on_member_join(member):
+    print(f"📥 on_member_join triggered for {member.name} at {datetime.utcnow().isoformat()}")
+    guild = member.guild
+    print(f"🕐 New member joined: {member.name}")
 
-            def check(m):
-                return m.author == member and isinstance(m.channel, discord.DMChannel)
+    def check(m):
+        return m.author == member and isinstance(m.channel, discord.DMChannel)
 
-            try:
-                await member.send("🐾 Well, well. Another writer in need of a cozy corner. Let’s get your writing space purring along.\n\n")
+    try:
+        await member.send("🐾 Well, well. Another writer in need of a cozy corner. Let’s get your writing space purring along.\n\n")
 
-                await member.send("And who, may I ask, shall I scratch into the ledger? What’s your name?")
-                name_msg = await bot.wait_for("message", check=check, timeout=300)
-                user_name = name_msg.content.strip()
+        await member.send("And who, may I ask, shall I scratch into the ledger? What’s your name?")
+        name_msg = await bot.wait_for("message", check=check, timeout=300)
+        user_name = name_msg.content.strip()
 
-                await member.send("How many projects are you currently juggling? Don’t worry, I won’t knock them off the desk… probably.")
-                num_projects_msg = await bot.wait_for("message", check=check, timeout=300)
-                num_text = num_projects_msg.content.strip().lower()
-                word_to_num = {
-                    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
-                    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10
-                }
+        await member.send("How many projects are you currently juggling? Don’t worry, I won’t knock them off the desk… probably.")
+        num_projects_msg = await bot.wait_for("message", check=check, timeout=300)
+        num_text = num_projects_msg.content.strip().lower()
+        word_to_num = {
+            "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+            "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10
+        }
+
+        try:
+            num_projects = int(num_text) if num_text.isdigit() else word_to_num[num_text]
+        except (KeyError, ValueError):
+            await member.send("❌ Please enter a digit or a word (e.g., '2' or 'two'). Setup cancelled.")
+            return
+
+        admin_role = discord.utils.get(guild.roles, name=ADMIN_ROLE_NAME)
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            member: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True),
+        }
+        if admin_role:
+            overwrites[admin_role] = discord.PermissionOverwrite(view_channel=True, manage_channels=True)
+
+        category_name = f"{user_name}'s Projects"
+        category = await guild.create_category(name=category_name, overwrites=overwrites)
+
+        user_projects[member.id] = []
+        user_categories[member.id] = category.id
+
+        for i in range(1, num_projects + 1):
+            while True:
+                await member.send(
+                    f"📚 Project #{i}, then. Curl up and reply with:\n"
+                    "`Title, Genre, Current Word Count, Goal Word Count, Stage`\n\n"
+                    "(Example: `The Cat Who Wrote a Novel, Fantasy, 15000, 50000, First Draft`)\n\n"
+                    "No pressure—just five little details. Your stage can be whatever you want (Editing, Awaiting Feedback, Revising Act II, lining the bottom of a kitty litter, etc). I’ll be watching from a warm spot on your manuscript."
+                )
+                details = await bot.wait_for("message", check=check, timeout=300)
+                parts = [p.strip() for p in details.content.split(",")]
+
+                if len(parts) < 5:
+                    await member.send("❌ I need all five details, my dear. Please try again.")
+                    continue
 
                 try:
-                    num_projects = int(num_text) if num_text.isdigit() else word_to_num[num_text]
-                except (KeyError, ValueError):
-                    await member.send("❌ Please enter a digit or a word (e.g., '2' or 'two'). Setup cancelled.")
-                    return
+                    project_name, genre, word_count, goal_word_count, stage = parts
+                    current_wc = int(word_count)
+                    goal_wc = int(goal_word_count)
+                except ValueError:
+                    await member.send("❌ Please ensure the Word Count and Goal Word Count are numbers. Try again.")
+                    continue
 
-                admin_role = discord.utils.get(guild.roles, name=ADMIN_ROLE_NAME)
-                overwrites = {
-                    guild.default_role: discord.PermissionOverwrite(view_channel=False),
-                    member: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True),
-                }
-                if admin_role:
-                    overwrites[admin_role] = discord.PermissionOverwrite(view_channel=True, manage_channels=True)
+                channel_name = project_name.lower().replace(" ", "-")
+                project_channel = await guild.create_text_channel(name=channel_name, category=category)
 
-                category_name = f"{user_name}'s Projects"
-                category = await guild.create_category(name=category_name, overwrites=overwrites)
+                tracker_message = await project_channel.send(
+                    build_tracker(project_name, genre, stage, current_wc, goal_wc)
+                )
+                await tracker_message.pin()
 
-                user_projects[member.id] = []
-                user_categories[member.id] = category.id
+                user_projects[member.id].append((project_channel.id, project_name, datetime.utcnow(), goal_wc, tracker_message.id, stage))
+                user_project_metadata[project_channel.id] = (member.id, project_name, goal_wc)
 
-                for i in range(1, num_projects + 1):
-                    while True:
-                        await member.send(
-                            f"📚 Project #{i}, then. Curl up and reply with:\n"
-                            "`Title, Genre, Current Word Count, Goal Word Count, Stage`\n\n"
-                            "(Example: `The Cat Who Wrote a Novel, Fantasy, 15000, 50000, First Draft`)\n\n"
-                            "No pressure—just five little details. Your stage can be whatever you want (Editing, Awaiting Feedback, Revising Act II, lining the bottom of a kitty litter, etc). I’ll be watching from a warm spot on your manuscript."
-                        )
-                        details = await bot.wait_for("message", check=check, timeout=300)
-                        parts = [p.strip() for p in details.content.split(",")]
+                break  # Only move on when valid input has been processed
 
-                        if len(parts) < 5:
-                            await member.send("❌ I need all five details, my dear. Please try again.")
-                            continue
+        await member.send("✅ All done! Your project nest is ready. Go give it a stretch and a scratch—er, I mean, a write.\n\n—yours sincerely, \n\n Inkwell, HRH, Meow-th of His Name")
 
-                        try:
-                            project_name, genre, word_count, goal_word_count, stage = parts
-                            current_wc = int(word_count)
-                            goal_wc = int(goal_word_count)
-                        except ValueError:
-                            await member.send("❌ Please ensure the Word Count and Goal Word Count are numbers. Try again.")
-                            continue
-
-                        channel_name = project_name.lower().replace(" ", "-")
-                        project_channel = await guild.create_text_channel(name=channel_name, category=category)
-
-                        tracker_message = await project_channel.send(
-                            build_tracker(project_name, genre, stage, current_wc, goal_wc)
-                        )
-                        await tracker_message.pin()
-
-                        user_projects[member.id].append((project_channel.id, project_name, datetime.utcnow(), goal_wc, tracker_message.id, stage))
-                        user_project_metadata[project_channel.id] = (member.id, project_name, goal_wc)
-
-                        break  # Only move on when valid input has been processed
-
-                await member.send("✅ All done! Your project nest is ready. Go give it a stretch and a scratch—er, I mean, a write.\n\n—yours sincerely, \n\n Inkwell, HRH, Meow-th of His Name")
-
-            except Exception as e:
-                print(f"❌ Error collecting info: {e}")
+    except Exception as e:
+        print(f"❌ Error collecting info: {e}")
 
 
 @tasks.loop(minutes=1)
