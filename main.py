@@ -65,6 +65,7 @@ onboarding_users = set()
 async def on_member_join(member):
     guild = member.guild
 
+    # Prevent simultaneous onboarding (but allow rejoining users later)
     if member.id in onboarding_users:
         print(f"⏳ Onboarding already in progress for {member.name} ({member.id}) — skipping.")
         return
@@ -104,13 +105,17 @@ async def on_member_join(member):
         if admin_role:
             overwrites[admin_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True)
 
+        # Create category
         category = await guild.create_category(name=f"{user_name}'s Projects", overwrites=overwrites)
         user_categories[member.id] = category.id
-        user_projects[member.id] = []
+        user_projects[member.id] = []  # Always reinitialise in case they're rejoining
 
         for i in range(1, num_projects + 1):
             while True:
-                await member.send(f"📘 Project #{i}? Reply with: `Title, Genre, Current Word Count, Goal Word Count, Stage` \nPlease separate each with a comma, and don’t use spaces in numbers.")
+                await member.send(
+                    f"📘 Project #{i}? Reply with: `Title, Genre, Current Word Count, Goal Word Count, Stage`\n"
+                    "Please separate each with a comma, and don’t use spaces in numbers."
+                )
                 msg = await bot.wait_for("message", check=check, timeout=300)
                 parts = [p.strip() for p in msg.content.split(",")]
 
@@ -129,6 +134,7 @@ async def on_member_join(member):
                 channel = await guild.create_text_channel(name=title.lower().replace(" ", "-"), category=category)
                 tracker = await channel.send(build_tracker(title, genre, stage, current_wc, goal_wc))
                 await tracker.pin()
+
                 user_projects[member.id].append((channel.id, title, datetime.utcnow(), goal_wc, tracker.id, stage))
                 user_project_metadata[channel.id] = (member.id, title, genre, goal_wc)
                 break
@@ -137,9 +143,9 @@ async def on_member_join(member):
 
     except Exception as e:
         print(f"❌ Error during onboarding for {member.name}: {e}")
+
     finally:
         onboarding_users.discard(member.id)
-
 
 @bot.event
 async def on_member_remove(member):
