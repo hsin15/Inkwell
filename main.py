@@ -320,5 +320,4 @@ async def weekly_goal_prompt():
                     user_goals[member.id] = True
                 except Exception as e:
                     print(f"❌ Couldn't DM {member.name}: {e}")
-
 bot.run(os.getenv("DISCORD_TOKEN"))
