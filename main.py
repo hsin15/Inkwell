@@ -126,6 +126,42 @@ async def on_member_join(member):
 
     except Exception as e:
         print(f"❌ Error collecting info: {e}")
+@tasks.loop(minutes=1)
+async def weekly_goal_prompt():
+    now = datetime.now(pytz.timezone("Australia/Sydney"))
+    if now.weekday() == 6 and now.hour == 15 and now.minute == 0:
+        for guild in bot.guilds:
+            for member in guild.members:
+                if member.bot:
+                    continue
+                try:
+                    await member.send(
+                        "🐾 Good afternoon, authorling. The scribbling hour is upon us once more.\n\n"
+                        "**How’s your project going?**\n"
+                        "Update your personal channel logbook when you can, and let me know:\n\n"
+                        "**What’s your writing goal this week?**\n"
+                        "Reply to this message, and I shall transcribe it into #weekly-writing-goals in my most elegant pawwriting.\n\n"
+                        "—Inkwell, HRH, Meow-th of His Name"
+                    )
+                    user_goals[member.id] = True
+                except Exception as e:
+                    print(f"❌ Couldn't DM {member.name}: {e}")
+
+@tasks.loop(hours=24)
+async def inactivity_reminder():
+    now = datetime.utcnow()
+    for member_id, projects in user_projects.items():
+        inactive_projects = [name for _, name, last, _, _, _ in projects if now - last > timedelta(days=14)]
+        if inactive_projects:
+            user = await bot.fetch_user(member_id)
+            if user:
+                await user.send(
+                    "📆 *rustles through old pages* Ahem. I couldn’t help but notice your project log has been gathering a *touch* of dust...\n\n"
+                    "**You haven’t updated the following in a while:**\n"
+                    + "\n".join(f"• {p}" for p in inactive_projects) +
+                    "\n\nPop back in and give me something to file, would you? I do so love a progress update.\n\n"
+                    "—Inkwell, HRH, Meow-th of His Name"
+                )
 
 @bot.event
 async def on_message(message):
