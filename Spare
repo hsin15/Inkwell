@@ -1,0 +1,256 @@
+import discord
+from discord.ext import commands, tasks
+import os
+from datetime import datetime, timedelta
+import pytz
+import re
+
+# SETUP INTENTS
+intents = discord.Intents.default()
+intents.members = True
+intents.messages = True
+intents.message_content = True
+
+# CONFIGURE BOT
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+# CONFIGURE ADMIN ROLE NAME
+ADMIN_ROLE_NAME = "Admin"
+
+# Dictionary to track user project channels and last update times
+user_projects = {}  # {user_id: [(channel_id, project_name, last_update_datetime, goal_word_count)]}
+user_categories = {}  # {user_id: category_id}
+user_goals = {}  # Store temporary goal responses
+user_project_metadata = {}  # {channel_id: (user_id, project_name, goal_word_count)}
+
+@bot.event
+async def on_ready():
+    print(f"✅ Logged in as {bot.user}")
+    weekly_goal_prompt.start()
+    inactivity_reminder.start()
+    update_progress_tracker_summary.start()
+
+@bot.event
+async def on_member_join(member):
+    guild = member.guild
+    print(f"🕐 New member joined: {member.name}")
+
+    def check(m):
+        return m.author == member and isinstance(m.channel, discord.DMChannel)
+
+    try:
+        await member.send(
+            "Welcome to the server! Let's set up your writing space. This will create a folder for you and a progress logbook so that everyone in the server can see where you're up to when you update it."
+        )
+
+        await member.send("What’s your name?")
+        name_msg = await bot.wait_for("message", check=check, timeout=300)
+        user_name = name_msg.content.strip()
+
+        await member.send("How many writing projects are you working on?")
+        num_projects_msg = await bot.wait_for("message", check=check, timeout=300)
+        num_text = num_projects_msg.content.strip().lower()
+        word_to_num = {
+            "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+            "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10
+        }
+        try:
+            num_projects = int(num_text) if num_text.isdigit() else word_to_num[num_text]
+        except (KeyError, ValueError):
+            await member.send("Sorry, I didn’t understand that number. Please enter a digit or a word (e.g., '2' or 'two').")
+            return
+
+        admin_role = discord.utils.get(guild.roles, name=ADMIN_ROLE_NAME)
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            member: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True),
+        }
+        if admin_role:
+            overwrites[admin_role] = discord.PermissionOverwrite(view_channel=True, manage_channels=True)
+
+        category_name = f"{user_name}'s Projects"
+        category = await guild.create_category(name=category_name, overwrites=overwrites)
+
+        user_projects[member.id] = []
+        user_categories[member.id] = category.id
+
+        for i in range(1, num_projects + 1):
+            await member.send(f"Let's set up project #{i}. Please reply with the following on one line:\nTitle, Genre, Current Word Count, Goal Word Count, Stage")
+            details = await bot.wait_for("message", check=check, timeout=300)
+            parts = [p.strip() for p in details.content.split(",")]
+
+            if len(parts) < 5:
+                await member.send("Sorry, I need all five pieces of information. Please try again.")
+                continue
+
+            project_name, genre, word_count, goal_word_count, stage = parts
+            channel_name = project_name.lower().replace(" ", "-")
+
+            project_channel = await guild.create_text_channel(name=channel_name, category=category)
+
+            welcome_message = (
+                f"Welcome {user_name}. This is your space to track your progress for {project_name}.\n\n"
+                "We'd love it if you kept the group updated regularly by adding new comments here—you are the only one who can do so, as this is your writing space.\n\n"
+                "Here's the first logbook entry based on the info you provided to get started:\n\n"
+                f"**Title:** {project_name}\n"
+                f"**Genre:** {genre}\n"
+                f"**Word Count:** {word_count}\n"
+                f"**Goal Word Count:** {goal_word_count}\n"
+                f"**Stage:** {stage}\n\n"
+                "Keep using this format going forward so you can track your progress!\n\n"
+                "If you leave the server, this space and your project updates will be deleted automatically.\n\n"
+                "Message Henry if you have any questions or need help!"
+            )
+            msg = await project_channel.send(welcome_message)
+            await msg.pin()
+
+            user_projects[member.id].append((project_channel.id, project_name, datetime.utcnow(), int(goal_word_count)))
+            user_project_metadata[project_channel.id] = (member.id, project_name, int(goal_word_count))
+
+        await member.send("Thank you! Please go check out the channels created for you to provide updates.")
+
+    except Exception as e:
+        print(f"❌ Failed to collect member info: {e}")
+
+@bot.event
+async def on_member_remove(member):
+    guild = member.guild
+    if member.id in user_projects:
+        for channel_id, _, _, _ in user_projects[member.id]:
+            channel = guild.get_channel(channel_id)
+            if channel:
+                await channel.delete()
+        del user_projects[member.id]
+        print(f"🕒️ Deleted project channels for {member.name}")
+
+    if member.id in user_categories:
+        category = guild.get_channel(user_categories[member.id])
+        if category:
+            await category.delete()
+        del user_categories[member.id]
+        print(f"🕒️ Deleted category for {member.name}")
+
+@tasks.loop(minutes=1)
+async def weekly_goal_prompt():
+    now = datetime.now(pytz.timezone("Australia/Sydney"))
+    if now.weekday() == 6 and now.hour == 15 and now.minute == 0:
+        for guild in bot.guilds:
+            for member in guild.members:
+                if member.bot:
+                    continue
+                try:
+                    await member.send(
+                        "**Hey there! 👋 How’s your project going?**\n"
+                        "Don’t forget to update your project logbook in your personal channel so the group can follow your progress.\n\n"
+                        "**What’s your writing goal for this week?**\n"
+                        "I’ll post it in the #weekly-writing-goals channel so we can all cheer each other on. Just reply to this message with your goal (e.g. *‘Write 3,000 words’* or *‘Finish outlining Act II’*)."
+                    )
+                    user_goals[member.id] = True
+                except Exception as e:
+                    print(f"❌ Couldn't DM {member.name}: {e}")
+
+@tasks.loop(hours=24)
+async def inactivity_reminder():
+    now = datetime.utcnow()
+    for member_id, projects in user_projects.items():
+        inactive_projects = [name for cid, name, last, _ in projects if now - last > timedelta(days=14)]
+        if inactive_projects:
+            user = await bot.fetch_user(member_id)
+            if user:
+                await user.send(
+                    "🙀 Just a gentle reminder: I noticed you haven’t updated the progress tracker for the following projects in a while:\n"
+                    + "\n".join(f"• {p}" for p in inactive_projects) +
+                    "\n\nPop in and give us an update when you can. We’d love to hear how you’re going!"
+                )
+
+@tasks.loop(hours=24)
+async def update_progress_tracker_summary():
+    progress_channel = None
+    for guild in bot.guilds:
+        progress_channel = discord.utils.get(guild.text_channels, name="progress-tracker")
+        if progress_channel:
+            break
+
+    if not progress_channel:
+        return
+
+    summary_lines = []
+    for member_id, projects in user_projects.items():
+        user = await bot.fetch_user(member_id)
+        user_summary = [f"**{user.name}**"]
+        for _, name, _, goal in projects:
+            for cid, _, _, _ in projects:
+                channel = bot.get_channel(cid)
+                if channel:
+                    async for msg in channel.history(limit=10):
+                        current_wc_match = re.search(r"Word\\s*Count:\\s*(\\d+)", msg.content, re.IGNORECASE)
+                        if current_wc_match:
+                            current_wc = int(current_wc_match.group(1))
+                            percent = round(current_wc / goal * 100)
+                            bar = "█" * (percent // 10) + "░" * (10 - percent // 10)
+                            user_summary.append(f"**{name}**\n`{bar}` {percent}% complete\n**{current_wc} / {goal} words**\n")
+                            break
+        summary_lines.append("\n".join(user_summary))
+
+    combined_summary = "\n\n".join(summary_lines)
+    pins = await progress_channel.pins()
+    if pins:
+        await pins[0].edit(content=combined_summary)
+    else:
+        msg = await progress_channel.send(combined_summary)
+        await msg.pin()
+
+@bot.event
+async def on_message(message):
+    await bot.process_commands(message)
+
+    if message.author.bot:
+        return
+
+    if isinstance(message.channel, discord.TextChannel):
+        for member_id, projects in user_projects.items():
+            for i, (cid, name, _, goal) in enumerate(projects):
+                if message.channel.id == cid:
+                    current_wc_match = re.search(r"Word\\s*Count:\\s*(\\d+)", message.content, re.IGNORECASE)
+                    if current_wc_match:
+                        current_wc = int(current_wc_match.group(1))
+                        percent = round(current_wc / goal * 100)
+                        bar = "█" * (percent // 10) + "░" * (10 - percent // 10)
+                        pinned = (await message.channel.pins())[0]
+                        await pinned.edit(content=f"**Progress for {name}**\n\n`{bar}` {percent}% complete\n**Word Count:** {current_wc} / {goal}\n\n_Updated: {datetime.utcnow().strftime('%Y-%m-%d')}_")
+
+                    user_projects[member_id][i] = (cid, name, datetime.utcnow(), goal)
+                    break
+
+    if isinstance(message.channel, discord.DMChannel) and message.author.id in user_goals:
+        goal_channel = None
+        for guild in bot.guilds:
+            goal_channel = discord.utils.get(guild.text_channels, name="weekly-writing-goals")
+            if goal_channel:
+                break
+
+        if goal_channel:
+            await goal_channel.send(f"{message.author.mention}'s goal for this week is to: {message.content}")
+        del user_goals[message.author.id]
+
+@bot.command()
+async def test_weekly_prompt(ctx):
+    admin_role = discord.utils.get(ctx.guild.roles, name=ADMIN_ROLE_NAME)
+    if admin_role in ctx.author.roles:
+        await ctx.author.send(
+            "**Hey there! 👋 How’s your project going?**\n"
+            "Don’t forget to update your project logbook in your personal channel so the group can follow your progress.\n\n"
+            "**What’s your writing goal for this week?**\n"
+            "I’ll post it in the #weekly-writing-goals channel so we can all cheer each other on. Just reply to this message with your goal (e.g. *‘Write 3,000 words’* or *‘Finish outlining Act II’*)."
+        )
+        user_goals[ctx.author.id] = True
+        await ctx.send("✅ Weekly goal DM sent to you as a test.")
+
+@bot.command()
+async def test_inactivity(ctx):
+    admin_role = discord.utils.get(ctx.guild.roles, name=ADMIN_ROLE_NAME)
+    if admin_role in ctx.author.roles:
+        await inactivity_reminder()
+        await ctx.send("✅ Inactivity check/test run complete.")
+
+bot.run(os.getenv("YOUR_BOT_TOKEN"))
