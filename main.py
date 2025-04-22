@@ -291,36 +291,4 @@ async def test_inactivity(ctx):
         await inactivity_reminder()
         await ctx.send("✅ Inactivity check complete.")
 
-@tasks.loop(hours=24)
-async def inactivity_reminder():
-    now = datetime.utcnow()
-    for member_id, projects in user_projects.items():
-        inactive_projects = [name for _, name, last, _, _, _ in projects if now - last > timedelta(days=14)]
-        if inactive_projects:
-            user = await bot.fetch_user(member_id)
-            if user:
-                await user.send(
-                    "⏰ Reminder: You haven’t updated these projects in a while:\n"
-                    + "\n".join(f"• {p}" for p in inactive_projects) +
-                    "\n\nUpdate your log when you get the chance!"
-                )
-
-@tasks.loop(minutes=1)
-async def weekly_goal_prompt():
-    now = datetime.now(pytz.timezone("Australia/Sydney"))
-    if now.weekday() == 6 and now.hour == 15 and now.minute == 0:
-        for guild in bot.guilds:
-            for member in guild.members:
-                if member.bot:
-                    continue
-                try:
-                    await member.send(
-                        "**Hey there! 👋 How’s your project going?**\n"
-                        "Update your project logbook this week!\n\n"
-                        "**What’s your writing goal?**\n"
-                        "Reply and I’ll post it in the #weekly-writing-goals channel."
-                    )
-                    user_goals[member.id] = True
-                except Exception as e:
-                    print(f"❌ Couldn't DM {member.name}: {e}")
 bot.run(os.getenv("DISCORD_TOKEN"))
