@@ -1,33 +1,40 @@
 import discord
 from discord.ext import commands, tasks
 import os
-import re
 from datetime import datetime, timedelta
 import pytz
+import re
 
+# SETUP INTENTS
 intents = discord.Intents.default()
 intents.members = True
 intents.messages = True
 intents.message_content = True
 
+# CONFIGURE BOT
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# ADMIN ROLE
 ADMIN_ROLE_NAME = "Admin"
 
+# IN-MEMORY STORAGE
 user_projects = {}
 user_categories = {}
 user_goals = {}
 user_project_metadata = {}
 
+# UTIL: TRACKER BUILDER
 def build_tracker(name, genre, stage, current_wc, goal_wc):
     try:
         percent = round(current_wc / goal_wc * 100)
         bar = "█" * (percent // 10) + "░" * (10 - percent // 10)
     except (ValueError, ZeroDivisionError):
-        percent, bar, current_wc, goal_wc = 0, "░" * 10, 0, 1
+        percent = 0
+        bar = "░" * 10
+        current_wc, goal_wc = 0, 1
 
     return (
-        f"\U0001f4cc **Progress Tracker for _{name}_**\n"
+        f"📌 **Progress Tracker for _{name}_**\n"
         f"**Genre:** {genre}\n"
         f"**Stage:** {stage}\n"
         f"`{bar}` {percent}% complete\n"
@@ -38,17 +45,25 @@ def build_tracker(name, genre, stage, current_wc, goal_wc):
         "`Stage: [new stage]`"
     )
 
+# BOT READY
+def start_tasks():
+    if not weekly_goal_prompt.is_running():
+        weekly_goal_prompt.start()
+    if not inactivity_reminder.is_running():
+        inactivity_reminder.start()
+
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
-    weekly_goal_prompt.start()
-    inactivity_reminder.start()
+    start_tasks()
 
+# NEW MEMBER INTAKE
 @bot.event
 async def on_member_join(member):
     guild = member.guild
-    def check(m):
-        return m.author == member and isinstance(m.channel, discord.DMChannel)
+
+    def check(msg):
+        return msg.author == member and isinstance(msg.channel, discord.DMChannel)
 
     try:
         await member.send("🐾 Well, well. Another writer in need of a cozy corner...")
@@ -61,12 +76,12 @@ async def on_member_join(member):
 
         while True:
             await member.send("How many projects are you juggling?\n(Enter a number or a word between 1 and 10, e.g. `3` or `three`)")
-            msg = await bot.wait_for("message", check=check, timeout=300)
-            num = msg.content.strip().lower()
             try:
-                project_count = int(num) if num.isdigit() else word_to_num[num]
+                response = await bot.wait_for("message", check=check, timeout=300)
+                num_text = response.content.strip().lower()
+                num_projects = int(num_text) if num_text.isdigit() else word_to_num[num_text]
                 break
-            except (ValueError, KeyError):
+            except (KeyError, ValueError):
                 await member.send("❌ That wasn’t a valid number. Try again with something like `2` or `two`.")
 
         admin_role = discord.utils.get(guild.roles, name=ADMIN_ROLE_NAME)
@@ -77,39 +92,41 @@ async def on_member_join(member):
         if admin_role:
             overwrites[admin_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True)
 
-        category = await guild.create_category(f"{user_name}'s Projects", overwrites=overwrites)
+        category = await guild.create_category(name=f"{user_name}'s Projects", overwrites=overwrites)
         user_categories[member.id] = category.id
         user_projects[member.id] = []
 
-        for i in range(1, project_count + 1):
+        for i in range(1, num_projects + 1):
             while True:
                 await member.send(f"📘 Project #{i}? Reply with: `Title, Genre, Current Word Count, Goal Word Count, Stage`")
-                response = await bot.wait_for("message", check=check, timeout=300)
-                parts = [p.strip() for p in response.content.split(",")]
+                msg = await bot.wait_for("message", check=check, timeout=300)
+                parts = [p.strip() for p in msg.content.split(",")]
+
                 if len(parts) < 5:
                     await member.send("❌ I need all five details. Try again.")
                     continue
+
                 try:
-                    name, genre, wc, gwc, stage = parts
-                    current_wc = int(wc)
-                    goal_wc = int(gwc)
-                    break
+                    title, genre, current, goal, stage = parts
+                    current_wc = int(current)
+                    goal_wc = int(goal)
                 except ValueError:
                     await member.send("❌ Word counts must be numbers. Try again.")
+                    continue
 
-            ch_name = name.lower().replace(" ", "-")
-            ch = await guild.create_text_channel(name=ch_name, category=category)
-            tracker = await ch.send(build_tracker(name, genre, stage, current_wc, goal_wc))
-            await tracker.pin()
-
-            user_projects[member.id].append((ch.id, name, datetime.utcnow(), goal_wc, tracker.id, stage))
-            user_project_metadata[ch.id] = (member.id, name, genre, goal_wc)
+                channel = await guild.create_text_channel(name=title.lower().replace(" ", "-"), category=category)
+                tracker = await channel.send(build_tracker(title, genre, stage, current_wc, goal_wc))
+                await tracker.pin()
+                user_projects[member.id].append((channel.id, title, datetime.utcnow(), goal_wc, tracker.id, stage))
+                user_project_metadata[channel.id] = (member.id, title, genre, goal_wc)
+                break
 
         await member.send("✅ All done! Your writing den is ready.")
 
     except Exception as e:
-        print(f"❌ Error onboarding {member.name}: {e}")
+        print(f"❌ Intake error: {e}")
 
+# WEEKLY GOAL DM
 @tasks.loop(minutes=1)
 async def weekly_goal_prompt():
     now = datetime.now(pytz.timezone("Australia/Sydney"))
@@ -128,25 +145,29 @@ async def weekly_goal_prompt():
                         "—Inkwell, HRH, Meow-th of His Name"
                     )
                     user_goals[member.id] = True
-                except Exception as e:
-                    print(f"❌ Couldn't DM {member.name}: {e}")
+                except:
+                    continue
 
+# INACTIVITY REMINDER
 @tasks.loop(hours=24)
 async def inactivity_reminder():
     now = datetime.utcnow()
     for uid, projects in user_projects.items():
-        stale = [name for _, name, last, _, _, _ in projects if now - last > timedelta(days=14)]
-        if stale:
-            user = await bot.fetch_user(uid)
-            if user:
+        inactive = [title for _, title, last, _, _, _ in projects if now - last > timedelta(days=14)]
+        if inactive:
+            try:
+                user = await bot.fetch_user(uid)
                 await user.send(
                     "📆 *rustles through old pages* Ahem. I couldn’t help but notice your project log has been gathering a *touch* of dust...\n\n"
                     "**You haven’t updated the following in a while:**\n"
-                    + "\n".join(f"• {name}" for name in stale) +
+                    + "\n".join(f"• {p}" for p in inactive) +
                     "\n\nPop back in and give me something to file, would you? I do so love a progress update.\n\n"
                     "—Inkwell, HRH, Meow-th of His Name"
                 )
+            except:
+                continue
 
+# MANUAL PROJECT ADD
 @bot.command(name="addproject")
 async def add_project(ctx):
     member = ctx.author
@@ -166,73 +187,68 @@ async def add_project(ctx):
             return
 
         try:
-            name, genre, wc, gwc, stage = parts
-            current_wc = int(wc)
-            goal_wc = int(gwc)
+            title, genre, current, goal, stage = parts
+            current_wc = int(current)
+            goal_wc = int(goal)
         except ValueError:
             await member.send("❌ Word counts must be numbers. Try again.")
             return
 
         guild = ctx.guild
-        cat_id = user_categories.get(member.id)
-        if not cat_id:
+        category_id = user_categories.get(member.id)
+        if not category_id:
             await member.send("Hmm. I couldn’t find your writing den. Try rejoining the server to start fresh.")
             return
 
-        category = discord.utils.get(guild.categories, id=cat_id)
+        category = discord.utils.get(guild.categories, id=category_id)
         if not category:
             await member.send("Your category has vanished like an idea at 3am. I can’t add a project without it.")
             return
 
-        ch_name = name.lower().replace(" ", "-")
-        ch = await guild.create_text_channel(name=ch_name, category=category)
-        tracker = await ch.send(build_tracker(name, genre, stage, current_wc, goal_wc))
+        channel = await guild.create_text_channel(name=title.lower().replace(" ", "-"), category=category)
+        tracker = await channel.send(build_tracker(title, genre, stage, current_wc, goal_wc))
         await tracker.pin()
-
-        user_projects[member.id].append((ch.id, name, datetime.utcnow(), goal_wc, tracker.id, stage))
-        user_project_metadata[ch.id] = (member.id, name, genre, goal_wc)
-
-        await member.send(f"✅ Project '{name}' has been added to your writing den!")
+        user_projects[member.id].append((channel.id, title, datetime.utcnow(), goal_wc, tracker.id, stage))
+        user_project_metadata[channel.id] = (member.id, title, genre, goal_wc)
+        await member.send(f"✅ Project '{title}' has been added to your writing den!")
 
     except Exception as e:
         await member.send("❌ Something went wrong while setting up your project.")
         print(f"❌ Error in addproject command: {e}")
 
+# TRACKER AUTO-UPDATE
 @bot.event
 async def on_message(message):
     if message.author.bot or not isinstance(message.channel, discord.TextChannel):
         return
 
-    chan_id = message.channel.id
-    if chan_id not in user_project_metadata:
+    channel_id = message.channel.id
+    if channel_id not in user_project_metadata:
+        await bot.process_commands(message)
         return
 
-    uid, name, genre, goal_wc = user_project_metadata[chan_id]
-    data = user_projects.get(uid, [])
-
-    for i, (cid, pname, last, goal, tracker_id, stage) in enumerate(data):
-        if cid != chan_id:
+    user_id, title, genre, goal_wc = user_project_metadata[channel_id]
+    for i, (chan_id, _, _, _, tracker_id, stage) in enumerate(user_projects[user_id]):
+        if chan_id != channel_id:
             continue
 
-        wc = re.search(r"Current Word Count:\s*(\d+)", message.content, re.IGNORECASE)
-        st = re.search(r"Stage:\s*(.+)", message.content, re.IGNORECASE)
-
-        if not wc and not st:
+        wc_match = re.search(r"Current Word Count:\s*(\d+)", message.content, re.IGNORECASE)
+        stage_match = re.search(r"Stage:\s*(.+)", message.content, re.IGNORECASE)
+        if not wc_match and not stage_match:
             break
 
-        new_wc = int(wc.group(1)) if wc else goal
-        new_stage = st.group(1).strip() if st else stage
+        new_wc = int(wc_match.group(1)) if wc_match else goal_wc
+        new_stage = stage_match.group(1).strip() if stage_match else stage
 
         try:
-            tracker = await message.channel.fetch_message(tracker_id)
-            user_projects[uid][i] = (cid, pname, datetime.utcnow(), new_wc, tracker_id, new_stage)
-            updated = build_tracker(pname, genre, new_stage, new_wc, goal_wc)
-            await tracker.edit(content=updated)
-            print(f"✅ Updated tracker for '{pname}' in #{message.channel.name}")
+            tracker_message = await message.channel.fetch_message(tracker_id)
+            user_projects[user_id][i] = (chan_id, title, datetime.utcnow(), goal_wc, tracker_id, new_stage)
+            await tracker_message.edit(content=build_tracker(title, genre, new_stage, new_wc, goal_wc))
         except Exception as e:
-            print(f"❌ Failed to update tracker in #{message.channel.name}: {e}")
+            print(f"❌ Tracker update failed: {e}")
         break
 
     await bot.process_commands(message)
 
+# RUN BOT
 bot.run(os.getenv("DISCORD_TOKEN"))
