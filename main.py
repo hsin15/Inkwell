@@ -51,50 +51,52 @@ async def on_ready():
     weekly_goal_prompt.start()
     inactivity_reminder.start()
 
-@bot.event
-async def on_member_join(member):
-    print(f"📥 on_member_join triggered for {member.name} at {datetime.utcnow().isoformat()}")
-    guild = member.guild
-    print(f"🕐 New member joined: {member.name}")
+        @bot.event
+        async def on_member_join(member):
+            print(f"📥 on_member_join triggered for {member.name} at {datetime.utcnow().isoformat()}")
+            guild = member.guild
+            print(f"🕐 New member joined: {member.name}")
 
-    def check(m):
-        return m.author == member and isinstance(m.channel, discord.DMChannel)
+            def check(m):
+                return m.author == member and isinstance(m.channel, discord.DMChannel)
 
-    try:
-        await member.send("\ud83d\udc3e Well, well. Another writer in need of a cozy corner. Let’s get your writing space purring along.\n\n")
+            try:
+                await member.send("🐾 Well, well. Another writer in need of a cozy corner. Let’s get your writing space purring along.\n\n")
 
-        await member.send("And who, may I ask, shall I scratch into the ledger? What’s your name?")
-        name_msg = await bot.wait_for("message", check=check, timeout=300)
-        user_name = name_msg.content.strip()
+                await member.send("And who, may I ask, shall I scratch into the ledger? What’s your name?")
+                name_msg = await bot.wait_for("message", check=check, timeout=300)
+                user_name = name_msg.content.strip()
 
-        await member.send("How many projects are you currently juggling? Don’t worry, I won’t knock them off the desk… probably.")
-        num_projects_msg = await bot.wait_for("message", check=check, timeout=300)
-        num_text = num_projects_msg.content.strip().lower()
-        word_to_num = {
-            "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
-            "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10
-        }
-        try:
-            num_projects = int(num_text) if num_text.isdigit() else word_to_num[num_text]
-        except (KeyError, ValueError):
-            await member.send("Please enter a digit or a word (e.g., '2' or 'two').")
-            return
+                await member.send("How many projects are you currently juggling? Don’t worry, I won’t knock them off the desk… probably.")
+                num_projects_msg = await bot.wait_for("message", check=check, timeout=300)
+                num_text = num_projects_msg.content.strip().lower()
+                word_to_num = {
+                    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+                    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10
+                }
 
-        admin_role = discord.utils.get(guild.roles, name=ADMIN_ROLE_NAME)
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            member: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True),
-        }
-        if admin_role:
-            overwrites[admin_role] = discord.PermissionOverwrite(view_channel=True, manage_channels=True)
+                try:
+                    num_projects = int(num_text) if num_text.isdigit() else word_to_num[num_text]
+                except (KeyError, ValueError):
+                    await member.send("❌ Please enter a digit or a word (e.g., '2' or 'two'). Setup cancelled.")
+                    return
 
-        category_name = f"{user_name}'s Projects"
-        category = await guild.create_category(name=category_name, overwrites=overwrites)
+                admin_role = discord.utils.get(guild.roles, name=ADMIN_ROLE_NAME)
+                overwrites = {
+                    guild.default_role: discord.PermissionOverwrite(view_channel=False),
+                    member: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True),
+                }
+                if admin_role:
+                    overwrites[admin_role] = discord.PermissionOverwrite(view_channel=True, manage_channels=True)
 
-        user_projects[member.id] = []
-        user_categories[member.id] = category.id
+                category_name = f"{user_name}'s Projects"
+                category = await guild.create_category(name=category_name, overwrites=overwrites)
 
-        for i in range(1, num_projects + 1):
+                user_projects[member.id] = []
+                user_categories[member.id] = category.id
+
+                for i in range(1, num_projects + 1):
+                    while True:
                         await member.send(
                             f"📚 Project #{i}, then. Curl up and reply with:\n"
                             "`Title, Genre, Current Word Count, Goal Word Count, Stage`\n\n"
@@ -105,18 +107,19 @@ async def on_member_join(member):
                         parts = [p.strip() for p in details.content.split(",")]
 
                         if len(parts) < 5:
-                            await member.send("I need all five details, my dear. Please try again.")
+                            await member.send("❌ I need all five details, my dear. Please try again.")
                             continue
 
-                        project_name, genre, word_count, goal_word_count, stage = parts
-                        channel_name = project_name.lower().replace(" ", "-")
-                        project_channel = await guild.create_text_channel(name=channel_name, category=category)
-
                         try:
+                            project_name, genre, word_count, goal_word_count, stage = parts
                             current_wc = int(word_count)
                             goal_wc = int(goal_word_count)
                         except ValueError:
-                            current_wc, goal_wc = 0, 1
+                            await member.send("❌ Please ensure the Word Count and Goal Word Count are numbers. Try again.")
+                            continue
+
+                        channel_name = project_name.lower().replace(" ", "-")
+                        project_channel = await guild.create_text_channel(name=channel_name, category=category)
 
                         tracker_message = await project_channel.send(
                             build_tracker(project_name, genre, stage, current_wc, goal_wc)
@@ -126,10 +129,13 @@ async def on_member_join(member):
                         user_projects[member.id].append((project_channel.id, project_name, datetime.utcnow(), goal_wc, tracker_message.id, stage))
                         user_project_metadata[project_channel.id] = (member.id, project_name, goal_wc)
 
-        await member.send("✅ All done! Your project nest is ready. Go give it a stretch and a scratch—er, I mean, a write.\n\n—yours sincerely, \n\n Inkwell, HRH, Meow-th of His Name")
+                        break  # Only move on when valid input has been processed
 
-    except Exception as e:
-        print(f"❌ Error collecting info: {e}")
+                await member.send("✅ All done! Your project nest is ready. Go give it a stretch and a scratch—er, I mean, a write.\n\n—yours sincerely, \n\n Inkwell, HRH, Meow-th of His Name")
+
+            except Exception as e:
+                print(f"❌ Error collecting info: {e}")
+
 
 @tasks.loop(minutes=1)
 async def weekly_goal_prompt():
