@@ -69,14 +69,21 @@ async def on_member_join(member):
         await member.send("How many projects are you juggling?")
         num_projects_msg = await bot.wait_for("message", check=check, timeout=300)
         num_text = num_projects_msg.content.strip().lower()
-        word_to_num = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
-                       "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}
+        word_to_num = {
+            "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+            "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10
+        }
 
-        try:
-            num_projects = int(num_text) if num_text.isdigit() else word_to_num[num_text]
-        except (KeyError, ValueError):
-            await member.send("❌ Please enter a valid number. Setup cancelled.")
-            return
+        while True:
+            await member.send("How many projects are you juggling?\n(Enter a number or a word between 1 and 10, e.g. `3` or `three`)")
+            num_projects_msg = await bot.wait_for("message", check=check, timeout=300)
+            num_text = num_projects_msg.content.strip().lower()
+
+            try:
+                num_projects = int(num_text) if num_text.isdigit() else word_to_num[num_text]
+                break  # valid input received
+            except (KeyError, ValueError):
+                await member.send("❌ That wasn’t a valid number. Try again with something like `2` or `two`.")
 
         admin_role = discord.utils.get(guild.roles, name=ADMIN_ROLE_NAME)
         overwrites = {
