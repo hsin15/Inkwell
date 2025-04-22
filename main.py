@@ -138,6 +138,39 @@ async def on_member_join(member):
     except Exception as e:
         print(f"❌ Error during onboarding for {member.name}: {e}")
 
+@bot.event
+async def on_member_remove(member):
+    guild = member.guild
+    user_id = member.id
+
+    # Remove their category and all project channels
+    if user_id in user_categories:
+        category_id = user_categories[user_id]
+        category = discord.utils.get(guild.categories, id=category_id)
+
+        if category:
+            for channel in category.channels:
+                try:
+                    await channel.delete()
+                    print(f"🗑️ Deleted channel: {channel.name}")
+                except Exception as e:
+                    print(f"❌ Failed to delete channel {channel.name}: {e}")
+            try:
+                await category.delete()
+                print(f"🗑️ Deleted category: {category.name}")
+            except Exception as e:
+                print(f"❌ Failed to delete category {category.name}: {e}")
+
+        # Clean up from memory
+        del user_categories[user_id]
+        del user_projects[user_id]
+
+        # Remove from project metadata
+        for cid in list(user_project_metadata):
+            if user_project_metadata[cid][0] == user_id:
+                del user_project_metadata[cid]
+
+        print(f"✅ Cleaned up data for {member.name}")
 
 # WEEKLY GOAL DM
 @tasks.loop(minutes=1)
