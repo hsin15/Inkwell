@@ -291,5 +291,50 @@ async def test_inactivity(ctx):
     if admin_role in ctx.author.roles:
         await inactivity_reminder()
         await ctx.send("✅ Inactivity check complete.")
+        
+@bot.event
+async def on_message(message):
+    if message.author.bot or not isinstance(message.channel, discord.TextChannel):
+        return
+
+    channel_id = message.channel.id
+
+    # Only proceed if this channel is a tracked project channel
+    if channel_id not in user_project_metadata:
+        return
+
+    user_id, project_name, goal_wc = user_project_metadata[channel_id]
+    project_data_list = user_projects.get(user_id, [])
+
+    for i, (chan_id, proj_name, last_update, goal, tracker_msg_id, stage) in enumerate(project_data_list):
+        if chan_id != channel_id:
+            continue
+
+        # Look for both current word count and stage updates
+        wc_match = re.search(r"Current Word Count:\s*(\d+)", message.content, re.IGNORECASE)
+        stage_match = re.search(r"Stage:\s*(.+)", message.content, re.IGNORECASE)
+
+        if not wc_match and not stage_match:
+            break  # No updates to process
+
+        # Update stored data
+        new_wc = int(wc_match.group(1)) if wc_match else None
+        new_stage = stage_match.group(1).strip() if stage_match else stage
+
+        try:
+            tracker_message = await message.channel.fetch_message(tracker_msg_id)
+            updated_wc = new_wc if new_wc is not None else goal
+            user_projects[user_id][i] = (
+                chan_id, proj_name, datetime.utcnow(), updated_wc, tracker_msg_id, new_stage
+            )
+
+            updated_content = build_tracker(proj_name, "Unknown", new_stage, updated_wc, goal_wc)
+            await tracker_message.edit(content=updated_content)
+            print(f"✅ Updated tracker for '{proj_name}' in #{message.channel.name}")
+        except Exception as e:
+            print(f"❌ Failed to update tracker in #{message.channel.name}: {e}")
+        break
+
+    await bot.process_commands(message)  # Allow commands to keep working
 
 bot.run(os.getenv("DISCORD_TOKEN"))
