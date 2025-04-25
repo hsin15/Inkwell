@@ -387,4 +387,4 @@ async def on_message(message):
     await bot.process_commands(message)
 
 # RUN BOT
-bot.run(os.getenv("DISCORD_TOKEN"))
+bot.run(os.getenv("YOUR_BOT_TOKEN"))
