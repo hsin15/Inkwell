@@ -388,8 +388,22 @@ async def add_project(ctx):
 @commands.has_role("Admin")
 async def export_data(ctx):
     try:
+        # Convert datetime objects to strings before printing
+        serializable_user_projects = {}
+        for user_id, projects in user_projects.items():
+            serializable_user_projects[user_id] = []
+            for channel_id, title, last_update, goal_wc, tracker_id, stage in projects:
+                serializable_user_projects[user_id].append((
+                    channel_id,
+                    title,
+                    last_update.isoformat(),  # Convert datetime to string
+                    goal_wc,
+                    tracker_id,
+                    stage
+                ))
+
         content = {
-            "user_projects": user_projects,
+            "user_projects": serializable_user_projects,
             "user_categories": user_categories,
             "user_project_metadata": user_project_metadata,
         }
@@ -403,6 +417,7 @@ async def export_data(ctx):
         await ctx.send("📄 Data printed to console logs. Please copy it from the Render logs.")
     except Exception as e:
         await ctx.send(f"❌ Failed to export data: {e}")
+
 
 @bot.command(name="printdata")
 @commands.has_role("Admin")
