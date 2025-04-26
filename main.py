@@ -56,6 +56,7 @@ def start_tasks():
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
+    load_data()
     start_tasks()
 
 # NEW MEMBER INTAKE
@@ -224,6 +225,20 @@ async def inactivity_reminder():
                 continue
 
 DATA_FILE = "data.json"
+
+def load_data():
+    try:
+        with open(DATA_FILE, "r") as f:
+            data = json.load(f)
+            global user_projects, user_categories, user_project_metadata
+            user_projects = {int(k): [tuple(item) for item in v] for k, v in data["user_projects"].items()}
+            user_categories = {int(k): v for k, v in data["user_categories"].items()}
+            user_project_metadata = {int(k): tuple(v) for k, v in data["user_project_metadata"].items()}
+        print("✅ Successfully loaded project data from file.")
+    except FileNotFoundError:
+        print("📂 No existing data file found. Starting fresh.")
+    except Exception as e:
+        print(f"❌ Failed to load data: {e}")
 
 @bot.command(name="saveprojects")
 @commands.has_role("Admin")
