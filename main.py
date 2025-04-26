@@ -288,7 +288,12 @@ def load_data():
         with open(DATA_FILE, "r") as f:
             data = json.load(f)
             global user_projects, user_categories, user_project_metadata
-            user_projects = {int(k): [tuple(item) for item in v] for k, v in data["user_projects"].items()}
+            user_projects = {
+                int(k): [
+                    (item[0], item[1], datetime.fromisoformat(item[2]), item[3], item[4], item[5])
+                    for item in v
+                ] for k, v in data["user_projects"].items()
+            }
             user_categories = {int(k): v for k, v in data["user_categories"].items()}
             user_project_metadata = {int(k): tuple(v) for k, v in data["user_project_metadata"].items()}
         print("✅ Successfully loaded project data from file.")
@@ -297,13 +302,28 @@ def load_data():
     except Exception as e:
         print(f"❌ Failed to load data: {e}")
 
+
 @bot.command(name="saveprojects")
 @commands.has_role("Admin")
 async def save_projects(ctx):
     """Manually saves all current user project data to a JSON file."""
     try:
+        # Convert datetime objects to strings for saving
+        serializable_user_projects = {}
+        for user_id, projects in user_projects.items():
+            serializable_user_projects[user_id] = []
+            for channel_id, title, last_update, goal_wc, tracker_id, stage in projects:
+                serializable_user_projects[user_id].append((
+                    channel_id,
+                    title,
+                    last_update.isoformat(),  # <-- This converts datetime to a string
+                    goal_wc,
+                    tracker_id,
+                    stage
+                ))
+
         data = {
-            "user_projects": user_projects,
+            "user_projects": serializable_user_projects,
             "user_categories": user_categories,
             "user_project_metadata": user_project_metadata,
         }
@@ -313,6 +333,7 @@ async def save_projects(ctx):
     except Exception as e:
         await ctx.send(f"❌ Failed to save data: {e}")
         print(f"❌ Save error: {e}")
+
         
 # MANUAL PROJECT ADD
 @bot.command(name="addproject")
