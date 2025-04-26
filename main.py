@@ -57,16 +57,15 @@ def start_tasks():
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
     load_data()
-  
 
     # ---- BEGIN MANUAL RECONSTRUCTION ----
-    
+
     # HENRY
     user_projects[985147622719381535] = [
         (1364237573505024054, "Project Mazahreon", datetime.utcnow(), 125000, 1364237574884954183, "Revising Chapter 6")
     ]
     user_project_metadata[1364237573505024054] = (985147622719381535, "Project Mazahreon", "Political Fantasy", 125000)
-    
+
     # DANNIKA
     user_projects[1235486733093834825] = [
         (1364385811340202034, "Annie & Jay", datetime.utcnow(), 90000, 1364385812489441341, "First Draft"),
@@ -78,7 +77,7 @@ async def on_ready():
     user_project_metadata[1364386005095813160] = (1235486733093834825, "Project November", "Romantic Fantasy", 120000)
     user_project_metadata[1364386356993724446] = (1235486733093834825, "Project Lion", "Epic Fantasy", 110000)
     user_project_metadata[1364386895521648760] = (1235486733093834825, "Project Man-Eater Vol 1", "Crime", 25000)
-    
+
     # DAMIEN
     user_projects[1224874508230332476] = [
         (1364568144177528916, "The Wine-Dark Book 3", datetime.utcnow(), 140000, 1364568145192423445, "just beginning"),
@@ -88,7 +87,7 @@ async def on_ready():
     user_project_metadata[1364568144177528916] = (1224874508230332476, "The Wine-Dark Book 3", "Fantasy", 140000)
     user_project_metadata[1364568379934900314] = (1224874508230332476, "The Wretched Folk", "Fantasy", 120000)
     user_project_metadata[1364568720089022484] = (1224874508230332476, "The Witch Pirate", "Fantasy", 120000)
-    
+
     # JENSEN
     user_projects[1364582393247174737] = [
         (1364584823821172746, "Circus of Kings", datetime.utcnow(), 200000, 1364584824676810842, "3rd draft"),
@@ -100,7 +99,7 @@ async def on_ready():
     user_project_metadata[1364585139358793769] = (1364582393247174737, "Project Locke", "magical realism", 80000)
     user_project_metadata[1364585459396775968] = (1364582393247174737, "Project Tautology", "high fantasy and coming of age", 80000)
     user_project_metadata[1364585723092795412] = (1364582393247174737, "Project Lighthouse", "Sci-fi and horror", 50000)
-    
+
     # ERIN
     user_projects[793992048222404650] = [
         (1365318540118458473, "Seiber", datetime.utcnow(), 80000, 1365318541317767273, "Final Proofs"),
@@ -112,9 +111,10 @@ async def on_ready():
     user_project_metadata[1365318764941283401] = (793992048222404650, "A Traitor Among Tyrants", "YA Fantasy", 86000)
     user_project_metadata[1365318906247385088] = (793992048222404650, "The Three Witches", "Fantasy", 50000)
     user_project_metadata[1365319132786200625] = (793992048222404650, "The Painting of the Grey Man", "Fantasy", 50000)
-    
+
     # ---- END MANUAL RECONSTRUCTION ----
-  start_tasks()
+
+    start_tasks()
 
 # NEW MEMBER INTAKE
 # Global set to track onboarding users
