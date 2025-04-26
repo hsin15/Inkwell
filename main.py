@@ -284,6 +284,9 @@ async def inactivity_reminder():
 DATA_FILE = "data.json"
 
 def load_data():
+    if not os.path.exists(DATA_FILE):
+        print("📂 No data.json found. Skipping load.")
+        return
     try:
         with open(DATA_FILE, "r") as f:
             data = json.load(f)
@@ -297,10 +300,9 @@ def load_data():
             user_categories = {int(k): v for k, v in data["user_categories"].items()}
             user_project_metadata = {int(k): tuple(v) for k, v in data["user_project_metadata"].items()}
         print("✅ Successfully loaded project data from file.")
-    except FileNotFoundError:
-        print("📂 No existing data file found. Starting fresh.")
     except Exception as e:
         print(f"❌ Failed to load data: {e}")
+
 
 
 @bot.command(name="saveprojects")
@@ -407,7 +409,7 @@ async def export_data(ctx):
             "user_categories": user_categories,
             "user_project_metadata": user_project_metadata,
         }
-        pretty_json = json.dumps(content, indent=4)
+        pretty_json = json.dumps(content, indent=4, default=str)
 
         # Because Discord messages can't hold too much, just print to logs
         print("====== USER DATA DUMP ======")
