@@ -4,6 +4,7 @@ import os
 from datetime import datetime, timedelta
 import pytz
 import re
+import json
 
 # SETUP INTENTS
 intents = discord.Intents.default()
@@ -222,6 +223,25 @@ async def inactivity_reminder():
             except:
                 continue
 
+DATA_FILE = "data.json"
+
+@bot.command(name="saveprojects")
+@commands.has_role("Admin")
+async def save_projects(ctx):
+    """Manually saves all current user project data to a JSON file."""
+    try:
+        data = {
+            "user_projects": user_projects,
+            "user_categories": user_categories,
+            "user_project_metadata": user_project_metadata,
+        }
+        with open(DATA_FILE, "w") as f:
+            json.dump(data, f, indent=4)
+        await ctx.send("✅ Successfully saved project data to file.")
+    except Exception as e:
+        await ctx.send(f"❌ Failed to save data: {e}")
+        print(f"❌ Save error: {e}")
+        
 # MANUAL PROJECT ADD
 @bot.command(name="addproject")
 async def add_project(ctx):
