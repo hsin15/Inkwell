@@ -291,6 +291,20 @@ async def add_project(ctx):
         await member.send("❌ Something went wrong while setting up your project.")
         print(f"❌ Error in addproject command: {e}")
 
+@bot.command(name="printdata")
+@commands.has_role("Admin")
+async def print_data(ctx):
+    try:
+        with open("data.json", "r") as f:
+            content = f.read()
+        # Avoid sending huge files via Discord DM
+        await ctx.send("📂 Here's your data.json content (check console/logs).")
+        print("====== DATA.JSON CONTENT ======")
+        print(content)
+        print("================================")
+    except Exception as e:
+        await ctx.send(f"❌ Failed to read data.json: {e}")
+
 @bot.command(name="adminsetupme")
 @commands.has_role(ADMIN_ROLE_NAME)
 async def admin_setup_me(ctx):
