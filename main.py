@@ -291,6 +291,26 @@ async def add_project(ctx):
         await member.send("❌ Something went wrong while setting up your project.")
         print(f"❌ Error in addproject command: {e}")
 
+@bot.command(name="exportdata")
+@commands.has_role("Admin")
+async def export_data(ctx):
+    try:
+        content = {
+            "user_projects": user_projects,
+            "user_categories": user_categories,
+            "user_project_metadata": user_project_metadata,
+        }
+        pretty_json = json.dumps(content, indent=4)
+
+        # Because Discord messages can't hold too much, just print to logs
+        print("====== USER DATA DUMP ======")
+        print(pretty_json)
+        print("============================")
+
+        await ctx.send("📄 Data printed to console logs. Please copy it from the Render logs.")
+    except Exception as e:
+        await ctx.send(f"❌ Failed to export data: {e}")
+
 @bot.command(name="printdata")
 @commands.has_role("Admin")
 async def print_data(ctx):
