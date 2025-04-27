@@ -204,6 +204,23 @@ async def weekly_goal_prompt():
                     user_goals[member.id] = True
                 except:
                     continue
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    # Handle writing goal replies
+    if isinstance(message.channel, discord.DMChannel) and message.author.id in user_goals:
+        # Find the guild and #weekly-writing-goals channel
+        for guild in bot.guilds:
+            channel = discord.utils.get(guild.text_channels, name="weekly-writing-goals")
+            if channel:
+                await channel.send(f"✍️ **{message.author.display_name}'s Goal:** {message.content}")
+                break
+        # After recording, remove from pending goals
+        user_goals.pop(message.author.id, None)
+
+    await bot.process_commands(message)
 
 # INACTIVITY REMINDER
 @tasks.loop(hours=24)
