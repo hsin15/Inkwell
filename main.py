@@ -341,6 +341,29 @@ async def add_project(ctx):
         await member.send("❌ Something went wrong while setting up your project.")
         print(f"❌ Error in addproject command: {e}")
 
+@bot.command(name="sendgoalprompt")
+async def send_goal_prompt(ctx):
+    """Manually triggers the weekly goal prompt DM for yourself."""
+    member = ctx.author
+    if member.bot:
+        return
+
+    try:
+        await member.send(
+            "🐾 Good afternoon, authorling. The scribbling hour is upon us once more.\n\n"
+            "**How’s your project going?**\n"
+            "Update your personal channel logbook when you can, and let me know:\n\n"
+            "**What’s your writing goal this week?**\n"
+            "Reply to this message, and I shall transcribe it into #weekly-writing-goals in my most elegant pawwriting.\n\n"
+            "—Inkwell, HRH, Meow-th of His Name"
+        )
+        user_goals[member.id] = True
+        await ctx.send("✅ I've sent you the goal prompt!")
+    except Exception as e:
+        await ctx.send("❌ Failed to send you the goal prompt.")
+        print(f"❌ Error sending manual goal prompt: {e}")
+
+
 @bot.command(name="adminsetupme")
 @commands.has_role(ADMIN_ROLE_NAME)
 async def admin_setup_me(ctx):
