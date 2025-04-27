@@ -204,23 +204,7 @@ async def weekly_goal_prompt():
                     user_goals[member.id] = True
                 except:
                     continue
-@bot.event
-async def on_message(message):
-    if message.author.bot:
-        return
 
-    # Handle writing goal replies
-    if isinstance(message.channel, discord.DMChannel) and message.author.id in user_goals:
-        # Find the guild and #weekly-writing-goals channel
-        for guild in bot.guilds:
-            channel = discord.utils.get(guild.text_channels, name="weekly-writing-goals")
-            if channel:
-                await channel.send(f"✍️ **{message.author.display_name}'s Goal:** {message.content}")
-                break
-        # After recording, remove from pending goals
-        user_goals.pop(message.author.id, None)
-
-    await bot.process_commands(message)
 
 # INACTIVITY REMINDER
 @tasks.loop(hours=24)
@@ -438,39 +422,53 @@ async def admin_setup_me(ctx):
         print(f"❌ Error in adminsetupme: {e}")
 
 
-# TRACKER AUTO-UPDATE
 @bot.event
 async def on_message(message):
-    if message.author.bot or not isinstance(message.channel, discord.TextChannel):
+    if message.author.bot:
         return
 
-    channel_id = message.channel.id
-    if channel_id not in user_project_metadata:
+    # Handle writing goal DM replies
+    if isinstance(message.channel, discord.DMChannel) and message.author.id in user_goals:
+        for guild in bot.guilds:
+            channel = discord.utils.get(guild.text_channels, name="weekly-writing-goals")
+            if channel:
+                now = datetime.now(pytz.timezone("Australia/Sydney")).strftime("%d %B %Y")
+                await channel.send(
+                f"📝 __**{message.author.display_name}'s Weekly Goal**__ ({now}):\n"
+                f"> {message.content}"
+                )
+                break
+        user_goals.pop(message.author.id, None)
         await bot.process_commands(message)
-        return
+        return  # Stop here if it was a DM (don't try updating trackers)
 
-    user_id, title, genre, goal_wc = user_project_metadata[channel_id]
-    for i, (chan_id, _, _, _, tracker_id, stage) in enumerate(user_projects[user_id]):
-        if chan_id != channel_id:
-            continue
+    # Handle project tracker updates in text channels
+    if isinstance(message.channel, discord.TextChannel):
+        channel_id = message.channel.id
+        if channel_id in user_project_metadata:
+            user_id, title, genre, goal_wc = user_project_metadata[channel_id]
+            for i, (chan_id, _, _, _, tracker_id, stage) in enumerate(user_projects[user_id]):
+                if chan_id != channel_id:
+                    continue
 
-        wc_match = re.search(r"Current Word Count:\s*(\d+)", message.content, re.IGNORECASE)
-        stage_match = re.search(r"Stage:\s*(.+)", message.content, re.IGNORECASE)
-        if not wc_match and not stage_match:
-            break
+                wc_match = re.search(r"Current Word Count:\s*(\d+)", message.content, re.IGNORECASE)
+                stage_match = re.search(r"Stage:\s*(.+)", message.content, re.IGNORECASE)
+                if not wc_match and not stage_match:
+                    break
 
-        new_wc = int(wc_match.group(1)) if wc_match else goal_wc
-        new_stage = stage_match.group(1).strip() if stage_match else stage
+                new_wc = int(wc_match.group(1)) if wc_match else goal_wc
+                new_stage = stage_match.group(1).strip() if stage_match else stage
 
-        try:
-            tracker_message = await message.channel.fetch_message(tracker_id)
-            user_projects[user_id][i] = (chan_id, title, datetime.utcnow(), goal_wc, tracker_id, new_stage)
-            await tracker_message.edit(content=build_tracker(title, genre, new_stage, new_wc, goal_wc))
-        except Exception as e:
-            print(f"❌ Tracker update failed: {e}")
-        break
+                try:
+                    tracker_message = await message.channel.fetch_message(tracker_id)
+                    user_projects[user_id][i] = (chan_id, title, datetime.utcnow(), goal_wc, tracker_id, new_stage)
+                    await tracker_message.edit(content=build_tracker(title, genre, new_stage, new_wc, goal_wc))
+                except Exception as e:
+                    print(f"❌ Tracker update failed: {e}")
+                break
 
     await bot.process_commands(message)
+
 
 # RUN BOT
 bot.run(os.getenv("YOUR_BOT_TOKEN"))
