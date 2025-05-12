@@ -253,7 +253,22 @@ def load_data():
 @commands.has_role("Admin")
 async def save_projects(ctx):
     """Manually saves all current user project data to a JSON file and sends it to you via DM."""
+
+    global user_categories  # We'll rebuild this from scratch
+    user_categories = {}
+
     try:
+        # Rebuild user_categories based on category names and project ownership
+        for guild in bot.guilds:
+            for category in guild.categories:
+                # Match pattern like "Maz's Projects"
+                if category.name.lower().endswith("projects"):
+                    for member in guild.members:
+                        expected_name = f"{member.display_name}'s Projects".lower()
+                        if category.name.lower() == expected_name:
+                            user_categories[member.id] = category.id
+                            break
+
         # Convert datetime objects to strings for saving
         serializable_user_projects = {}
         for user_id, projects in user_projects.items():
@@ -273,6 +288,7 @@ async def save_projects(ctx):
             "user_categories": user_categories,
             "user_project_metadata": user_project_metadata,
         }
+
         with open(DATA_FILE, "w") as f:
             json.dump(data, f, indent=4)
 
@@ -289,7 +305,6 @@ async def save_projects(ctx):
     except Exception as e:
         await ctx.send(f"❌ Failed to save data: {e}")
         print(f"❌ Save error: {e}")
-
 
         
 # MANUAL PROJECT ADD
