@@ -264,7 +264,7 @@ async def save_projects(ctx):
                 # Match pattern like "Maz's Projects"
                 if category.name.lower().endswith("projects"):
                     for member in guild.members:
-                        expected_name = f"{member.display_name}'s Projects".lower()
+                        expected_name = f"{member.name}'s Projects".lower()
                         if category.name.lower() == expected_name:
                             user_categories[member.id] = category.id
                             break
