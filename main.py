@@ -254,20 +254,31 @@ def load_data():
 async def save_projects(ctx):
     """Manually saves all current user project data to a JSON file and sends it to you via DM."""
 
-    global user_categories  # We'll rebuild this from scratch
-    user_categories = {}
+    global user_categories
+    user_categories = {}  # Rebuild it cleanly
 
     try:
-        # Rebuild user_categories based on category names and project ownership
+        # Rebuild user_categories by scanning categories and matching names to users
         for guild in bot.guilds:
             for category in guild.categories:
-                # Match pattern like "Maz's Projects"
-                if category.name.lower().endswith("projects"):
-                    for member in guild.members:
-                        expected_name = f"{member.name}'s Projects".lower()
-                        if category.name.lower() == expected_name:
-                            user_categories[member.id] = category.id
-                            break
+                cat_name = category.name.lower()
+
+                # Skip unrelated categories
+                if not cat_name.endswith("projects"):
+                    continue
+
+                # Try to match this category to a member
+                for member in guild.members:
+                    if member.bot:
+                        continue
+
+                    # Match both display name and actual username (case-insensitive)
+                    expected_display = f"{member.display_name.lower()}'s projects"
+                    expected_username = f"{member.name.lower()}'s projects"
+
+                    if cat_name == expected_display or cat_name == expected_username:
+                        user_categories[member.id] = category.id
+                        break  # Don't need to keep checking once matched
 
         # Convert datetime objects to strings for saving
         serializable_user_projects = {}
@@ -294,7 +305,6 @@ async def save_projects(ctx):
 
         await ctx.send("✅ Successfully saved project data to file.")
 
-        # Now send the file via DM
         try:
             with open(DATA_FILE, "rb") as f:
                 await ctx.author.send("📂 Here's the latest saved `data.json` file:", file=discord.File(f, "data.json"))
@@ -305,6 +315,7 @@ async def save_projects(ctx):
     except Exception as e:
         await ctx.send(f"❌ Failed to save data: {e}")
         print(f"❌ Save error: {e}")
+
 
         
 # MANUAL PROJECT ADD
