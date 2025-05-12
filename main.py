@@ -252,35 +252,24 @@ def load_data():
 @bot.command(name="saveprojects")
 @commands.has_role("Admin")
 async def save_projects(ctx):
-    """Manually saves all current user project data to a JSON file and sends it to you via DM."""
+    """Saves all project and category data based on real channel-to-user mapping."""
 
     global user_categories
-    user_categories = {}  # Rebuild it cleanly
+    user_categories = {}
 
     try:
-        # Rebuild user_categories by scanning categories and matching names to users
-        for guild in bot.guilds:
-            for category in guild.categories:
-                cat_name = category.name.lower()
+        # Infer each user's category by tracing their project channels
+        for user_id, projects in user_projects.items():
+            for chan_id, _, _, _, _, _ in projects:
+                for guild in bot.guilds:
+                    channel = discord.utils.get(guild.channels, id=chan_id)
+                    if channel and channel.category:
+                        user_categories[user_id] = channel.category.id
+                        break  # Once we find one, stop checking for that user
+                if user_id in user_categories:
+                    break
 
-                # Skip unrelated categories
-                if not cat_name.endswith("projects"):
-                    continue
-
-                # Try to match this category to a member
-                for member in guild.members:
-                    if member.bot:
-                        continue
-
-                    # Match both display name and actual username (case-insensitive)
-                    expected_display = f"{member.display_name.lower()}'s projects"
-                    expected_username = f"{member.name.lower()}'s projects"
-
-                    if cat_name == expected_display or cat_name == expected_username:
-                        user_categories[member.id] = category.id
-                        break  # Don't need to keep checking once matched
-
-        # Convert datetime objects to strings for saving
+        # Convert datetime objects to strings
         serializable_user_projects = {}
         for user_id, projects in user_projects.items():
             serializable_user_projects[user_id] = []
