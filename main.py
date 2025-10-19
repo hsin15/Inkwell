@@ -216,26 +216,6 @@ async def inactivity_reminder():
             try:
                 user = await bot.fetch_user(uid)
                 await user.send(
-# INACTIVITY REMINDER
-@tasks.loop(hours=24)
-async def inactivity_reminder():
-    now = datetime.utcnow()
-    for uid, projects in user_projects.items():
-        inactive = [title for _, title, last, _, _, _ in projects if now - last > timedelta(days=14)]
-        if inactive:
-            try:
-                user = await bot.fetch_user(uid)
-                await user.send(
-# INACTIVITY REMINDER
-@tasks.loop(hours=24)
-async def inactivity_reminder():
-    now = datetime.utcnow()
-    for uid, projects in user_projects.items():
-        inactive = [title for _, title, last, _, _, _ in projects if now - last > timedelta(days=14)]
-        if inactive:
-            try:
-                user = await bot.fetch_user(uid)
-                await user.send(
 
 DATA_FILE = "data.json"
 
