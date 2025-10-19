@@ -216,14 +216,26 @@ async def inactivity_reminder():
             try:
                 user = await bot.fetch_user(uid)
                 await user.send(
-                    "📆 *rustles through old pages* Ahem. I couldn’t help but notice your project log has been gathering a *touch* of dust...\n\n"
-                    "**You haven’t updated the following in a while:**\n"
-                    + "\n".join(f"• {p}" for p in inactive) +
-                    "\n\nPop back in and give me something to file, would you? I do so love a progress update.\n\n"
-                    "—Inkwell, HRH, Meow-th of His Name"
-                )
-            except:
-                continue
+# INACTIVITY REMINDER
+@tasks.loop(hours=24)
+async def inactivity_reminder():
+    now = datetime.utcnow()
+    for uid, projects in user_projects.items():
+        inactive = [title for _, title, last, _, _, _ in projects if now - last > timedelta(days=14)]
+        if inactive:
+            try:
+                user = await bot.fetch_user(uid)
+                await user.send(
+# INACTIVITY REMINDER
+@tasks.loop(hours=24)
+async def inactivity_reminder():
+    now = datetime.utcnow()
+    for uid, projects in user_projects.items():
+        inactive = [title for _, title, last, _, _, _ in projects if now - last > timedelta(days=14)]
+        if inactive:
+            try:
+                user = await bot.fetch_user(uid)
+                await user.send(
 
 DATA_FILE = "data.json"
 
